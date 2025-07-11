@@ -8,7 +8,7 @@ backend:
   phases:
     build:
       commands:
-        - dnf update -y && dnf install -y sqlite-devel ca-certificates
+        - apt-get update && apt-get install -y libsqlite3-dev ca-certificates
         - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         - source $HOME/.cargo/env
         - cargo build --release
