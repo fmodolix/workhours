@@ -10,6 +10,15 @@ backend:
       # The name of the image we just built
       name: workhours
       port: 8080
+frontend:
+  phases:
+    build:
+      commands:
+        - echo "No frontend build required"
+  artifacts:
+    baseDirectory: /
+    files:
+      - swagger-ui.html
 # The customRules section is essential for routing incoming traffic to your container.
 customRules:
   - source: '</.*>'
