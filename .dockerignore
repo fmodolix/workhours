@@ -1,0 +1,25 @@
+# Generated files
+/target/
+**/*.rs.bk
+
+# Local database
+workhours.db
+
+# Environment files
+.env
+.env.*
+
+# Git files
+.git/
+.gitignore
+
+# Docker files (not needed in the build context)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
