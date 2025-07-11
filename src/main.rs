@@ -7,7 +7,8 @@ use env_logger;
 use workhours::{
     db,
     add_holiday, get_work_hours, list_holidays,
-    AppState
+    AppState,
+    openapi
 };
 
 #[actix_web::main]
@@ -25,6 +26,7 @@ async fn main() -> std::io::Result<()> {
             .service(add_holiday)
             .service(get_work_hours)
             .service(list_holidays)
+            .service(openapi::swagger_routes())
     })
     .bind("127.0.0.1:8080")?
     .run()

@@ -12,13 +12,11 @@
 <script>
   window.onload = function() {
     const ui = SwaggerUIBundle({
-      url: "/swagger",
+      url: "/schema",
       dom_id: '#swagger-ui',
       presets: [
         SwaggerUIBundle.presets.apis,
-        SwaggerUIBundle.SwaggerUIStandalonePreset
       ],
-      layout: "StandaloneLayout"
     });
   };
 </script>

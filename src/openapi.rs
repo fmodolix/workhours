@@ -1,5 +1,6 @@
-use actix_web::web;
+use actix_web::{web, HttpResponse, dev::HttpServiceFactory};
 use serde_json::json;
+use std::fs;
 
 pub fn swagger_spec() -> String {
     serde_json::to_string(&json!({
@@ -196,7 +197,24 @@ pub fn swagger_spec() -> String {
     })).unwrap()
 }
 
-pub fn swagger_route() -> impl actix_web::dev::HttpServiceFactory {
-    web::scope("/swagger")
-        .route("", web::get().to(|| async { swagger_spec() }))
+pub async fn serve_swagger_ui() -> HttpResponse {
+    match fs::read_to_string("swagger-ui.html") {
+        Ok(content) => HttpResponse::Ok()
+            .content_type("text/html; charset=utf-8")
+            .body(content),
+        Err(_) => HttpResponse::InternalServerError()
+            .body("Could not read swagger-ui.html file")
+    }
+}
+
+pub async fn serve_swagger_schema() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("application/json")
+        .body(swagger_spec())
+}
+
+pub fn swagger_routes() -> impl HttpServiceFactory {
+    web::scope("")
+        .service(web::resource("/swagger").route(web::get().to(serve_swagger_ui)))
+        .service(web::resource("/schema").route(web::get().to(serve_swagger_schema)))
 }
