@@ -24,7 +24,7 @@ async fn main() -> std::io::Result<()> {
     let db_location = env::var("DATABASE_LOCATION").unwrap_or_else(|_| "workhours.db".to_string());
 
     // Get server host and port from environment variables or use defaults
-    let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let server_port = env::var("SERVER_PORT").unwrap_or_else(|_| "8080".to_string());
     let server_url = format!("{}:{}", server_host, server_port);
 
