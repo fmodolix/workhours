@@ -6,6 +6,7 @@ use serde::{Serialize, Deserialize};
 pub struct Holiday {
     pub id: Option<i32>,
     pub date: String,
+    #[serde(default)]
     pub description: String,
     pub country: String,
 }
@@ -22,7 +23,7 @@ impl Database {
             "CREATE TABLE IF NOT EXISTS holidays (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
-                description TEXT NOT NULL,
+                description TEXT,
                 country TEXT NOT NULL
             )",
             [],

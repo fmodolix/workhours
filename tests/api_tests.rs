@@ -33,16 +33,18 @@ async fn create_test_app() -> impl actix_web::dev::Service<
 async fn test_add_holiday() {
     let app = create_test_app().await;
 
-    // Create a test holiday
-    let holiday = Holiday {
-        date: "2023-12-25T00:00:00Z".to_string(),
-        description: "Christmas".to_string(),
-    };
+    // Create a test holiday list
+    let holidays = vec![
+        Holiday {
+            date: "2023-12-25T00:00:00Z".to_string(),
+            description: "Christmas".to_string(),
+        }
+    ];
 
     // Send POST request to add the holiday
     let resp = test::TestRequest::post()
         .uri("/holidays/us")
-        .set_json(&holiday)
+        .set_json(&holidays)
         .send_request(&app)
         .await;
 
@@ -69,14 +71,16 @@ async fn test_list_holidays() {
     let app = create_test_app().await;
 
     // Add a test holiday
-    let holiday = Holiday {
-        date: "2023-01-01T00:00:00Z".to_string(),
-        description: "New Year's Day".to_string(),
-    };
+    let holidays = vec![
+        Holiday {
+            date: "2023-01-01T00:00:00Z".to_string(),
+            description: "New Year's Day".to_string(),
+        }
+    ];
 
     let _ = test::TestRequest::post()
         .uri("/holidays/fr")
-        .set_json(&holiday)
+        .set_json(&holidays)
         .send_request(&app)
         .await;
 
@@ -146,14 +150,16 @@ async fn test_get_work_hours_with_holiday() {
     let app = create_test_app().await;
 
     // Add a holiday
-    let holiday = Holiday {
-        date: "2023-10-04T00:00:00Z".to_string(),
-        description: "Test Holiday".to_string(),
-    };
+    let holidays = vec![
+        Holiday {
+            date: "2023-10-04T00:00:00Z".to_string(),
+            description: "Test Holiday".to_string(),
+        }
+    ];
 
     let _ = test::TestRequest::post()
         .uri("/holidays/us")
-        .set_json(&holiday)
+        .set_json(&holidays)
         .send_request(&app)
         .await;
 

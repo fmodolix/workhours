@@ -7,22 +7,41 @@ use serde::{Serialize, Deserialize};
 use chrono::{DateTime, TimeZone, Datelike};
 use chrono_tz::Tz;
 use std::sync::Mutex;
+use actix_web::cookie::time::Time;
+
+// Global variables to store the start and end of day times
 
 // Re-export types and functions needed for tests
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Holiday {
     pub date: String,
+    #[serde(default)]
     pub description: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct WorkHoursRequest {
     #[serde(rename = "startDate")]
     pub start_date: String,
     #[serde(flatten)]
+    #[serde(default)]
     pub end_or_duration: EndOrDuration,
+    #[serde(rename = "startOfDay", default = "default_start_of_day")]
+    pub start_of_day: String,
+    #[serde(rename = "endOfDay", default = "default_end_of_day")]
+    pub end_of_day: String,
+    #[serde(default)]
     pub country: String,
+    #[serde(default)]
     pub timezone: String,
+}
+
+fn default_start_of_day() -> String {
+    "09:00:00".to_string()
+}
+
+fn default_end_of_day() -> String {
+    "17:00:00".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,9 +57,19 @@ pub enum EndOrDuration {
     },
 }
 
+impl Default for EndOrDuration {
+    fn default() -> Self {
+        EndOrDuration::EndDate {
+            end_date: "".to_string()
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkHoursResponse {
     pub work_hours: f64,
+    pub work_minutes: f64,
+    pub work_seconds: f64,
     pub start_date: String,
     pub end_date: String,
 }
@@ -53,21 +82,33 @@ pub struct AppState {
 #[post("/holidays/{country}")]
 pub async fn add_holiday(
     data: web::Data<AppState>,
-    holiday: web::Json<Holiday>,
+    holidays: web::Json<Vec<Holiday>>,
     country: web::Path<String>,
 ) -> impl Responder {
     let country = country.to_lowercase();
-    let holiday = db::Holiday {
-        id: None,
-        date: holiday.date.clone(),
-        description: holiday.description.clone(),
-        country: country.clone(),
-    };
+    let mut success_count = 0;
+    let mut error_messages = Vec::new();
 
     let db = data.db.lock().unwrap();
-    match db.add_holiday(&holiday) {
-        Ok(_) => HttpResponse::Ok().json("Holiday added successfully"),
-        Err(e) => HttpResponse::InternalServerError().json(format!("Failed to add holiday: {}", e)),
+
+    for holiday in holidays.iter() {
+        let db_holiday = db::Holiday {
+            id: None,
+            date: holiday.date.clone(),
+            description: holiday.description.clone(),
+            country: country.clone(),
+        };
+
+        match db.add_holiday(&db_holiday) {
+            Ok(_) => success_count += 1,
+            Err(e) => error_messages.push(format!("Failed to add holiday {}: {}", holiday.date, e)),
+        }
+    }
+
+    if error_messages.is_empty() {
+        HttpResponse::Ok().json(format!("{} holidays added successfully", success_count))
+    } else {
+        HttpResponse::InternalServerError().json(error_messages)
     }
 }
 
@@ -79,7 +120,13 @@ pub struct WorkHoursQueryParams {
     pub end_date: Option<String>,
     #[serde(rename = "durationSeconds")]
     pub duration_seconds: Option<i64>,
+    #[serde(rename = "startOfDay", default = "default_start_of_day")]
+    pub start_of_day: String,
+    #[serde(rename = "endOfDay", default = "default_end_of_day")]
+    pub end_of_day: String,
+    #[serde(default)]
     pub country: String,
+    #[serde(default)]
     pub timezone: String,
 }
 
@@ -104,6 +151,8 @@ pub async fn get_work_hours(
         } else {
             return Ok(HttpResponse::BadRequest().json("Either endDate or durationSeconds must be provided"));
         },
+        start_of_day: req.start_of_day.clone(),
+        end_of_day: req.end_of_day.clone(),
         country: req.country.clone(),
         timezone: req.timezone.clone(),
     };
@@ -132,6 +181,11 @@ pub async fn calculate_work_hours(
     // Parse dates and convert to timezone-aware datetimes
     let start_date = DateTime::parse_from_rfc3339(&req.start_date)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid start date format: {}", e)))?;
+    let time_format = actix_web::cookie::time::format_description::parse("[hour]:[minute]:[second]").unwrap();
+    let start_of_day = Time::parse(&req.start_of_day, &time_format)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid start time format: {}", e)))?;
+    let end_of_day = Time::parse(&req.end_of_day, &time_format)
+        .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid end time format: {}", e)))?;
     let timezone: Tz = req.timezone.parse()
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid timezone: {}", e)))?;
 
@@ -185,32 +239,63 @@ pub async fn calculate_work_hours(
             continue;
         }
 
-        // Count work hours (9-17)
-        let start_of_day = timezone.from_local_datetime(&current.date_naive().and_hms_opt(9, 0, 0).unwrap()).unwrap();
-        let end_of_day = timezone.from_local_datetime(&current.date_naive().and_hms_opt(17, 0, 0).unwrap()).unwrap();
+        // Get start and end of day times from global variables
 
-        if current.date_naive() == end_date.date_naive() {
-            let day_work_hours = if end_date.time() < start_of_day.time() {
-                0.0
-            } else if end_date.time() >= start_of_day.time() && end_date.time() <= end_of_day.time() {
-                (end_date.signed_duration_since(start_of_day)).num_seconds() as f64 / 3600.0
+        let full_day = (end_of_day - start_of_day).as_seconds_f64() / 3600.0;
+
+        // Create start and end of day datetimes
+        let start_of_day = timezone.from_local_datetime(&current.date_naive().and_hms_opt(start_of_day.hour() as u32, start_of_day.minute() as u32, start_of_day.second() as u32).unwrap()).unwrap();
+        let end_of_day = timezone.from_local_datetime(&current.date_naive().and_hms_opt(end_of_day.hour() as u32, end_of_day.minute() as u32, end_of_day.second() as u32).unwrap()).unwrap();
+        if current.date_naive() == start_date.date_naive() && current.date_naive() == end_date.date_naive() {
+            if start_date.time() > end_of_day.time() || end_date.time() < start_of_day.time()   {
+                current = current + chrono::Duration::days(1);
+                continue;
+            }
+            let effective_start = if start_date.time() < start_of_day.time() {
+                start_of_day
             } else {
-                8.0
+                start_date
             };
-            work_hours += day_work_hours;
+            let effective_end = if end_date.time() > end_of_day.time() {
+                end_of_day
+            } else {
+                end_date
+            };
+            work_hours += effective_end.signed_duration_since(effective_start).num_seconds() as f64 / 3600.0;
         }
         else if current.date_naive() == start_date.date_naive() {
-            let day_work_hours = if start_date.time() < start_of_day.time() {
-                8.0
-            } else if start_date.time() >= start_of_day.time() && start_date.time() <= end_of_day.time() {
-                end_of_day.signed_duration_since(start_date).num_seconds() as f64 / 3600.0
+            // Start date - special case for standard start time
+            if start_date.time() >= end_of_day.time()   {
+                current = current + chrono::Duration::days(1);
+                continue;
+            }
+            // Partial start day
+            let effective_start = if start_date.time() < start_of_day.time() {
+                start_of_day
             } else {
-                0.0
+                start_date
             };
-            work_hours += day_work_hours;
+
+            work_hours += end_of_day.signed_duration_since(effective_start).num_seconds() as f64 / 3600.0
         }
+        else if current.date_naive() == end_date.date_naive() {
+            // End date - special case for standard end time
+            if end_date.time() < start_of_day.time()    {
+                current = current + chrono::Duration::days(1);
+                continue;
+            }
+            let effective_end = if end_date.time() > end_of_day.time() {
+                end_of_day
+            } else {
+                end_date
+            };
+
+            work_hours += effective_end.signed_duration_since(start_of_day).num_seconds() as f64 / 3600.0
+        }
+
         else {
-            work_hours += 8.0;
+            // Full workday - always 8 hours
+            work_hours += full_day;
         }
 
         current = current + chrono::Duration::days(1);
@@ -218,6 +303,8 @@ pub async fn calculate_work_hours(
 
     Ok(HttpResponse::Ok().json(WorkHoursResponse {
         work_hours,
+        work_minutes: work_hours * 60.0,
+        work_seconds: work_hours * 3600.0,
         start_date: start_date.to_rfc3339(),
         end_date: end_date.to_rfc3339(),
     }))
@@ -294,6 +381,8 @@ mod tests {
             end_or_duration: EndOrDuration::EndDate { 
                 end_date: "2023-10-02T17:00:00Z".to_string() 
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -317,6 +406,8 @@ mod tests {
             end_or_duration: EndOrDuration::EndDate { 
                 end_date: "2023-10-08T17:00:00Z".to_string() // Sunday
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -343,6 +434,8 @@ mod tests {
             end_or_duration: EndOrDuration::EndDate { 
                 end_date: "2023-10-06T17:00:00Z".to_string() // Friday
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -367,6 +460,8 @@ mod tests {
             end_or_duration: EndOrDuration::EndDate { 
                 end_date: "2023-10-02T17:00:00Z".to_string()
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -390,6 +485,8 @@ mod tests {
             end_or_duration: EndOrDuration::EndDate { 
                 end_date: "2023-10-02T17:00:00+02:00".to_string() // 5pm Paris time
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "fr".to_string(),
             timezone: "Europe/Paris".to_string(),
         };
@@ -414,6 +511,8 @@ mod tests {
             end_or_duration: EndOrDuration::Duration { 
                 duration_seconds: 432000 // 5 days
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -436,6 +535,8 @@ mod tests {
             end_or_duration: EndOrDuration::EndDate { 
                 end_date: "2023-10-02T09:00:00Z".to_string() // Same as start_date
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -460,6 +561,8 @@ mod tests {
             end_or_duration: EndOrDuration::EndDate { 
                 end_date: "2023-10-02T09:00:00Z".to_string() // Monday (before start_date)
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -484,6 +587,8 @@ mod tests {
             end_or_duration: EndOrDuration::Duration { 
                 duration_seconds: 0 // Zero duration
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -508,6 +613,8 @@ mod tests {
             end_or_duration: EndOrDuration::Duration { 
                 duration_seconds: -86400 // Negative duration (1 day)
             },
+            start_of_day: default_start_of_day(),
+            end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
         };
@@ -520,5 +627,56 @@ mod tests {
             assert!(error_string.contains("Start date must be strictly before end date"), 
                    "Error message should mention that start date must be before end date");
         }
+    }
+
+    #[actix_rt::test]
+    async fn test_calculate_work_hours_with_custom_day_times() {
+        // Test work hours calculation with custom start and end of day times
+        // 8am to 4pm instead of 9am to 5pm
+        let db_data = create_test_db_with_holidays(vec![]);
+
+        let request = WorkHoursRequest {
+            start_date: "2023-10-02T08:00:00Z".to_string(), // Monday at 8am
+            end_or_duration: EndOrDuration::EndDate { 
+                end_date: "2023-10-02T16:00:00Z".to_string() // Monday at 4pm
+            },
+            start_of_day: "08:00:00".to_string(),
+            end_of_day: "16:00:00".to_string(),
+            country: "us".to_string(),
+            timezone: "UTC".to_string(),
+        };
+
+        let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
+        let body = result.into_body();
+        let bytes = actix_web::body::to_bytes(body).await.unwrap();
+        let response: WorkHoursResponse = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(response.work_hours, 8.0);
+    }
+
+    #[actix_rt::test]
+    async fn test_calculate_work_hours_with_partial_custom_day() {
+        // Test work hours calculation with custom start and end of day times
+        // Starting at 10am with custom day from 8am to 4pm
+        let db_data = create_test_db_with_holidays(vec![]);
+
+        let request = WorkHoursRequest {
+            start_date: "2023-10-02T10:00:00Z".to_string(), // Monday at 10am
+            end_or_duration: EndOrDuration::EndDate { 
+                end_date: "2023-10-02T16:00:00Z".to_string() // Monday at 4pm
+            },
+            start_of_day: "08:00:00".to_string(),
+            end_of_day: "16:00:00".to_string(),
+            country: "us".to_string(),
+            timezone: "UTC".to_string(),
+        };
+
+        let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
+        let body = result.into_body();
+        let bytes = actix_web::body::to_bytes(body).await.unwrap();
+        let response: WorkHoursResponse = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(response.work_hours, 6.0); // 8am to 4pm = 8 hours
+
     }
 }

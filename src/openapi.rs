@@ -1,8 +1,14 @@
 use actix_web::{web, HttpResponse, dev::HttpServiceFactory};
 use serde_json::json;
 use std::fs;
+use std::env;
 
 pub fn swagger_spec() -> String {
+    // Get server host and port from environment variables or use defaults
+    let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let server_port = env::var("SERVER_PORT").unwrap_or_else(|_| "8080".to_string());
+    let server_url = format!("http://{}:{}", server_host, server_port);
+
     serde_json::to_string(&json!({
         "openapi": "3.0.0",
         "info": {
@@ -12,12 +18,12 @@ pub fn swagger_spec() -> String {
         },
         "servers": [
             {
-                "url": "http://localhost:8080",
+                "url": server_url,
                 "description": "Local server"
             }
         ],
         "paths": {
-            "/workhours": {
+            "/": {
                 "get": {
                     "summary": "Calculate work hours between dates",
                     "description": "Calculates the number of work hours between two dates, taking into account weekends, holidays, and timezones",
@@ -53,12 +59,35 @@ pub fn swagger_spec() -> String {
                         },
                         {
                             "in": "query",
+                            "name": "startOfDay",
+                            "required": false,
+                            "schema": {
+                                "type": "string",
+                                "format": "time"
+                            },
+                            "description": "Time to start counting work hours from (e.g. \"07:00:00\")",
+                            "default": "09:00:00"
+                        },
+                        {
+                            "in": "query",
+                            "name": "EndOfDay",
+                            "required": false,
+                            "schema": {
+                                "type": "string",
+                                "format": "time"
+                            },
+                            "description": "Time to stop counting work hours from (e.g. \"18:00:00\")",
+                            "default": "17:00:00"
+                        },
+                        {
+                            "in": "query",
                             "name": "country",
                             "required": true,
                             "schema": {
                                 "type": "string"
                             },
-                            "description": "Country code (e.g. \"fr\" for France)"
+                            "description": "Country code (e.g. \"fr\" for France)",
+                            "default": "fr"
                         },
                         {
                             "in": "query",
@@ -67,7 +96,9 @@ pub fn swagger_spec() -> String {
                             "schema": {
                                 "type": "string"
                             },
-                            "description": "Timezone in IANA format (e.g. \"Europe/Paris\")"
+                            "description": "Timezone in IANA format (e.g. \"Europe/Paris\")",
+                            "default": "Europe/Paris"
+
                         }
                     ],
                     "responses": {
@@ -101,8 +132,8 @@ pub fn swagger_spec() -> String {
             },
             "/holidays/{country}": {
                 "post": {
-                    "summary": "Add a holiday for a country",
-                    "description": "Adds a holiday for the specified country",
+                    "summary": "Add holidays for a country",
+                    "description": "Adds multiple holidays for the specified country",
                     "parameters": [
                         {
                             "in": "path",
@@ -119,13 +150,16 @@ pub fn swagger_spec() -> String {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/Holiday"
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Holiday"
+                                    }
                                 }
                             }
                         }
                     },
                     "responses": {
-                        "200": {
+                        "201": {
                             "description": "Holiday added successfully",
                             "content": {
                                 "text/plain": {
@@ -136,8 +170,38 @@ pub fn swagger_spec() -> String {
                             }
                         }
                     }
+                },
+                "get": {
+                    "summary": "List holidays for a country",
+                    "description": "Adds a holiday for the specified country",
+                    "parameters": [
+                        {
+                            "in": "path",
+                            "name": "country",
+                            "required": true,
+                            "schema": {
+                                "type": "string"
+                            },
+                            "description": "Country code"
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "List of holidays for the specified country",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/components/schemas/Holiday"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-            }
+            },
         },
         "components": {
             "schemas": {
@@ -155,6 +219,12 @@ pub fn swagger_spec() -> String {
                         "durationSeconds": {
                             "type": "integer"
                         },
+                        "startOfDay": {
+                            "type": "time"
+                        },
+                        "endOfDay": {
+                            "type": "time"
+                        },
                         "country": {
                             "type": "string"
                         },
@@ -165,6 +235,7 @@ pub fn swagger_spec() -> String {
                 },
                 "Holiday": {
                     "type": "object",
+                    "required": ["date"],
                     "properties": {
                         "date": {
                             "type": "string",
@@ -179,6 +250,14 @@ pub fn swagger_spec() -> String {
                     "type": "object",
                     "properties": {
                         "workHours": {
+                            "type": "number",
+                            "format": "float"
+                        },
+                        "workMinutes": {
+                            "type": "number",
+                            "format": "float"
+                        },
+                        "workSeconds": {
                             "type": "number",
                             "format": "float"
                         },

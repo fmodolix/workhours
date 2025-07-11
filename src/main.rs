@@ -2,6 +2,8 @@ use actix_web::{web, App, HttpServer, middleware::Logger};
 use log::info;
 use std::sync::Mutex;
 use env_logger;
+use dotenv::dotenv;
+use std::env;
 
 // Import from the library
 use workhours::{
@@ -13,12 +15,26 @@ use workhours::{
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Load environment variables from .env file
+    dotenv().ok();
+
     env_logger::init();
-    let database = db::Database::new("workhours.db").expect("Failed to initialize database");
+
+    // Get database location from environment variable or use default
+    let db_location = env::var("DATABASE_LOCATION").unwrap_or_else(|_| "workhours.db".to_string());
+
+    // Get server host and port from environment variables or use defaults
+    let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let server_port = env::var("SERVER_PORT").unwrap_or_else(|_| "8080".to_string());
+    let server_url = format!("{}:{}", server_host, server_port);
+
+    let database = db::Database::new(&db_location).expect("Failed to initialize database");
     let app_state = web::Data::new(AppState {
         db: Mutex::new(database),
     });
-    info!("Starting server...");
+
+    info!("Starting server on {}...", server_url);
+
     HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone())
@@ -28,7 +44,7 @@ async fn main() -> std::io::Result<()> {
             .service(list_holidays)
             .service(openapi::swagger_routes())
     })
-    .bind("127.0.0.1:8080")?
+    .bind(&server_url)?
     .run()
     .await
 }
