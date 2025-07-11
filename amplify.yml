@@ -1,10 +1,7 @@
 version: 1
 backend:
   phases:
-    build:
-      commands:
-        # Build the Docker image and tag it with the service name 'workhours'
-        - docker build -t workhours .
+    build: .
   artifacts:
     image:
       # The name of the image we just built
