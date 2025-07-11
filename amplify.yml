@@ -7,7 +7,7 @@ backend:
   phases:
     build:
       commands:
-        - apt-get update && apt-get install -y libsqlite3-dev ca-certificates
+        - apt update && apt install -y libsqlite3-dev ca-certificates
         - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         - source $HOME/.cargo/env
         - cargo build --release
