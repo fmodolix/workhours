@@ -1,0 +1,36 @@
+version: 1
+# Required environment variables:
+# - DATABASE_LOCATION: Path to the SQLite database file (default: /data/workhours.db)
+# - SERVER_HOST: Host address for the server to listen on (use 0.0.0.0 for production)
+# - SERVER_PORT: Port for the server to listen on (default: 8080)
+backend:
+  phases:
+    build:
+      commands:
+        - apt-get update && apt-get install -y libsqlite3-dev ca-certificates
+        - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        - source $HOME/.cargo/env
+        - cargo build --release
+    postBuild:
+      commands:
+        - mkdir -p /data
+  artifacts:
+    baseDirectory: target/release
+    files:
+      - workhours
+      - '**/*'
+  cache:
+    paths:
+      - target/**/*
+      - ~/.cargo/**/*
+frontend:
+  phases:
+    build:
+      commands:
+        - echo "No frontend build required"
+  artifacts:
+    baseDirectory: /
+    files:
+      - swagger-ui.html
+  cache:
+    paths: []
