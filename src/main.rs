@@ -35,6 +35,9 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting server on {}...", server_url);
 
+
+    println!("Starting server at {}", server_url);
+
     HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone())
