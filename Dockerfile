@@ -7,7 +7,7 @@ RUN cargo build --release
 
 FROM debian:bullseye-slim
 
-RUN apt-get update && apt-get install -y \
+RUN apt update && apt install -y \
     libsqlite3-0 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
