@@ -21,3 +21,13 @@ customRules:
   - source: '</.*>'
     target: 'http://workhours:8080'
     status: '200'
+# amplify.yml
+artifacts:
+  image:
+    port: 8080
+    healthcheck:
+      # Use curl to query the health endpoint from within the container
+      command: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      retries: 2
+      timeout: 5s

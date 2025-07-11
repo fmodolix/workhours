@@ -1,4 +1,4 @@
-use actix_web::{web, App, HttpServer, middleware::Logger};
+use actix_web::{web, App, HttpServer, middleware::Logger, get, Responder, HttpResponse};
 use log::info;
 use std::sync::Mutex;
 use env_logger;
@@ -13,6 +13,11 @@ use workhours::{
     openapi
 };
 
+#[get("/health")]
+async fn health() -> impl Responder {
+    HttpResponse::Ok().body("OK")
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Load environment variables from .env file
@@ -24,8 +29,8 @@ async fn main() -> std::io::Result<()> {
     let db_location = env::var("DATABASE_LOCATION").unwrap_or_else(|_| "workhours.db".to_string());
 
     // Get server host and port from environment variables or use defaults
-    let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let server_port = env::var("SERVER_PORT").unwrap_or_else(|_| "8080".to_string());
+    let server_host = "0.0.0.0".to_string();
+    let server_port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let server_url = format!("{}:{}", server_host, server_port);
 
     let database = db::Database::new(&db_location).expect("Failed to initialize database");
@@ -42,6 +47,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(app_state.clone())
             .wrap(Logger::default())
+            .service(health)
             .service(add_holiday)
             .service(get_work_hours)
             .service(list_holidays)
