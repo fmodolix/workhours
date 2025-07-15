@@ -37,9 +37,9 @@ async fn main() -> std::io::Result<()> {
     let app_state = web::Data::new(AppState {
         db: Mutex::new(database),
     });
-
-    info!("Starting server on {}...", server_url);
-
+    info!("Database location: {}", db_location);
+    info!("Server URL: {}", server_url);
+    info!("Starting server...");
 
     println!("Starting server at {}", server_url);
 
