@@ -3053,6 +3053,7 @@ dependencies = [
  "cloudwatch_logging",
  "dotenv",
  "env_logger",
+ "lazy_static",
  "log",
  "mockall",
  "reqwest",
