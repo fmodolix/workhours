@@ -22,83 +22,22 @@ pub fn swagger_spec() -> String {
         ],
         "paths": {
             "/": {
-                "get": {
+                "post": {
                     "summary": "Calculate work hours between dates",
                     "description": "Calculates the number of work hours between two dates, taking into account weekends, holidays, and timezones",
-                    "parameters": [
-                        {
-                            "in": "query",
-                            "name": "startDate",
-                            "required": true,
-                            "schema": {
-                                "type": "string",
-                                "format": "date-time"
-                            },
-                            "description": "Start date in RFC3339 format"
-                        },
-                        {
-                            "in": "query",
-                            "name": "endDate",
-                            "required": false,
-                            "schema": {
-                                "type": "string",
-                                "format": "date-time"
-                            },
-                            "description": "End date in RFC3339 format (use either endDate or durationSeconds)"
-                        },
-                        {
-                            "in": "query",
-                            "name": "durationSeconds",
-                            "required": false,
-                            "schema": {
-                                "type": "integer"
-                            },
-                            "description": "Duration in seconds (use either endDate or durationSeconds)"
-                        },
-                        {
-                            "in": "query",
-                            "name": "startOfDay",
-                            "required": false,
-                            "schema": {
-                                "type": "string",
-                                "format": "time"
-                            },
-                            "description": "Time to start counting work hours from (e.g. \"07:00:00\")",
-                            "default": "09:00:00"
-                        },
-                        {
-                            "in": "query",
-                            "name": "EndOfDay",
-                            "required": false,
-                            "schema": {
-                                "type": "string",
-                                "format": "time"
-                            },
-                            "description": "Time to stop counting work hours from (e.g. \"18:00:00\")",
-                            "default": "17:00:00"
-                        },
-                        {
-                            "in": "query",
-                            "name": "country",
-                            "required": true,
-                            "schema": {
-                                "type": "string"
-                            },
-                            "description": "Country code (e.g. \"fr\" for France)",
-                            "default": "fr"
-                        },
-                        {
-                            "in": "query",
-                            "name": "timezone",
-                            "required": true,
-                            "schema": {
-                                "type": "string"
-                            },
-                            "description": "Timezone in IANA format (e.g. \"Europe/Paris\")",
-                            "default": "Europe/Paris"
-
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/WorkHoursRequest"
+                                    }
+                                }
+                            }
                         }
-                    ],
+                    },
                     "responses": {
                         "200": {
                             "description": "Successful response",
@@ -218,16 +157,24 @@ pub fn swagger_spec() -> String {
                             "type": "integer"
                         },
                         "startOfDay": {
-                            "type": "time"
+                            "type": "string",
+                            "format": "time",
+                            "default": "09:00:00"
                         },
                         "endOfDay": {
-                            "type": "time"
+                            "type": "string",
+                            "format": "time",
+                            "default": "17:00:00"
                         },
                         "country": {
-                            "type": "string"
+                            "type": "string",
+                            "example": "fr",
+                            "default": "fr"
                         },
                         "timezone": {
-                            "type": "string"
+                            "type": "string",
+                            "default": "UTC",
+                            "example": "Europe/Paris"
                         }
                     }
                 },
@@ -237,7 +184,7 @@ pub fn swagger_spec() -> String {
                     "properties": {
                         "date": {
                             "type": "string",
-                            "format": "date-time"
+                            "format": "date"
                         },
                         "description": {
                             "type": "string"

@@ -130,31 +130,31 @@ pub struct WorkHoursQueryParams {
     pub timezone: String,
 }
 
-#[get("/")]
+#[post("/")]
 pub async fn get_work_hours(
     data: web::Data<AppState>,
-    req: web::Query<WorkHoursQueryParams>,
+    workhours: web::Json<WorkHoursQueryParams>,
 ) -> Result<HttpResponse, actix_web::error::Error> {
-    log::debug!("Received work hours request: {:?}", req);
+    log::debug!("Received work hours request: {:?}", workhours);
 
     // Convert query params to WorkHoursRequest
     let request = WorkHoursRequest {
-        start_date: req.start_date.clone(),
-        end_or_duration: if let Some(end_date) = &req.end_date {
+        start_date: workhours.start_date.clone(),
+        end_or_duration: if let Some(end_date) = &workhours.end_date {
             EndOrDuration::EndDate { 
                 end_date: end_date.clone() 
             }
-        } else if let Some(duration_seconds) = req.duration_seconds {
+        } else if let Some(duration_seconds) = workhours.duration_seconds {
             EndOrDuration::Duration { 
                 duration_seconds 
             }
         } else {
             return Ok(HttpResponse::BadRequest().json("Either endDate or durationSeconds must be provided"));
         },
-        start_of_day: req.start_of_day.clone(),
-        end_of_day: req.end_of_day.clone(),
-        country: req.country.clone(),
-        timezone: req.timezone.clone(),
+        start_of_day: workhours.start_of_day.clone(),
+        end_of_day: workhours.end_of_day.clone(),
+        country: workhours.country.clone(),
+        timezone: workhours.timezone.clone(),
     };
 
     calculate_work_hours(data, web::Json(request)).await
