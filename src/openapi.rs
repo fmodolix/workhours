@@ -5,8 +5,7 @@ use std::env;
 
 pub fn swagger_spec() -> String {
     // Get server host and port from environment variables or use defaults
-    let server_url = env::var("SERVER_URL").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
-    let server_url = format!("http://{}", server_url);
+    let server_url = env::var("SERVER_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
 
     serde_json::to_string(&json!({
         "openapi": "3.0.0",
@@ -18,7 +17,7 @@ pub fn swagger_spec() -> String {
         "servers": [
             {
                 "url": server_url,
-                "description": "Local server"
+                "description": "API Server"
             }
         ],
         "paths": {
