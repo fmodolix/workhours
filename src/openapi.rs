@@ -6,6 +6,9 @@ use std::env;
 pub fn swagger_spec() -> String {
     // Get server host and port from environment variables or use defaults
     let server_url = env::var("SERVER_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
+    let now = chrono::Utc::now();
+    let onehour = (now + chrono::Duration::hours(1)).to_rfc3339();
+    let current = now.to_rfc3339();
 
     serde_json::to_string(&json!({
         "openapi": "3.0.0",
@@ -30,10 +33,7 @@ pub fn swagger_spec() -> String {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/WorkHoursRequest"
-                                    }
+                                    "$ref": "#/components/schemas/WorkHoursRequest"
                                 }
                             }
                         }
@@ -149,11 +149,14 @@ pub fn swagger_spec() -> String {
                     "properties": {
                         "startDate": {
                             "type": "string",
-                            "format": "date-time"
+                            "format": "date-time",
+                            "default": current
                         },
                         "endDate": {
                             "type": "string",
-                            "format": "date-time"
+                            "format": "date-time",
+                            "default": onehour
+
                         },
                         "durationSeconds": {
                             "type": "integer"
