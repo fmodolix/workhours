@@ -8,6 +8,39 @@ use chrono::{DateTime, TimeZone, Datelike, NaiveDate};
 use chrono_tz::Tz;
 use std::sync::Mutex;
 use actix_web::cookie::time::Time;
+use std::collections::HashSet;
+use std::sync::OnceLock;
+
+// Function to get a static HashSet of valid ISO-3166-1 alpha-2 country codes
+fn iso_3166_1_country_codes() -> &'static HashSet<String> {
+    static COUNTRY_CODES: OnceLock<HashSet<String>> = OnceLock::new();
+    COUNTRY_CODES.get_or_init(|| {
+        let codes = [
+            "ad", "ae", "af", "ag", "ai", "al", "am", "ao", "aq", "ar", "as", "at", "au", "aw", "ax", "az",
+            "ba", "bb", "bd", "be", "bf", "bg", "bh", "bi", "bj", "bl", "bm", "bn", "bo", "bq", "br", "bs",
+            "bt", "bv", "bw", "by", "bz", "ca", "cc", "cd", "cf", "cg", "ch", "ci", "ck", "cl", "cm", "cn",
+            "co", "cr", "cu", "cv", "cw", "cx", "cy", "cz", "de", "dj", "dk", "dm", "do", "dz", "ec", "ee",
+            "eg", "eh", "er", "es", "et", "fi", "fj", "fk", "fm", "fo", "fr", "ga", "gb", "gd", "ge", "gf",
+            "gg", "gh", "gi", "gl", "gm", "gn", "gp", "gq", "gr", "gs", "gt", "gu", "gw", "gy", "hk", "hm",
+            "hn", "hr", "ht", "hu", "id", "ie", "il", "im", "in", "io", "iq", "ir", "is", "it", "je", "jm",
+            "jo", "jp", "ke", "kg", "kh", "ki", "km", "kn", "kp", "kr", "kw", "ky", "kz", "la", "lb", "lc",
+            "li", "lk", "lr", "ls", "lt", "lu", "lv", "ly", "ma", "mc", "md", "me", "mf", "mg", "mh", "mk",
+            "ml", "mm", "mn", "mo", "mp", "mq", "mr", "ms", "mt", "mu", "mv", "mw", "mx", "my", "mz", "na",
+            "nc", "ne", "nf", "ng", "ni", "nl", "no", "np", "nr", "nu", "nz", "om", "pa", "pe", "pf", "pg",
+            "ph", "pk", "pl", "pm", "pn", "pr", "ps", "pt", "pw", "py", "qa", "re", "ro", "rs", "ru", "rw",
+            "sa", "sb", "sc", "sd", "se", "sg", "sh", "si", "sj", "sk", "sl", "sm", "sn", "so", "sr", "ss",
+            "st", "sv", "sx", "sy", "sz", "tc", "td", "tf", "tg", "th", "tj", "tk", "tl", "tm", "tn", "to",
+            "tr", "tt", "tv", "tw", "tz", "ua", "ug", "um", "us", "uy", "uz", "va", "vc", "ve", "vg", "vi",
+            "vn", "vu", "wf", "ws", "ye", "yt", "za", "zm", "zw",
+        ];
+        codes.iter().map(|&s| s.to_string()).collect()
+    })
+}
+
+// Function to validate if a country code is ISO-3166-1 compliant
+pub fn is_valid_country_code(country: &str) -> bool {
+    iso_3166_1_country_codes().contains(&country.to_lowercase())
+}
 
 // Global variables to store the start and end of day times
 
@@ -86,6 +119,12 @@ pub async fn add_holiday(
     country: web::Path<String>,
 ) -> impl Responder {
     let country = country.to_lowercase();
+
+    // Validate that the country code is ISO-3166-1 compliant
+    if !is_valid_country_code(&country) {
+        return HttpResponse::BadRequest().json(format!("Invalid country code: {}. Must be a valid ISO-3166-1 alpha-2 code.", country));
+    }
+
     let mut success_count = 0;
     let mut error_messages = Vec::new();
 
@@ -137,6 +176,11 @@ pub async fn get_work_hours(
 ) -> Result<HttpResponse, actix_web::error::Error> {
     log::debug!("Received work hours request: {:?}", workhours);
 
+    // Validate that the country code is ISO-3166-1 compliant
+    if !workhours.country.is_empty() && !is_valid_country_code(&workhours.country) {
+        return Err(actix_web::error::ErrorBadRequest(format!("Invalid country code: {}. Must be a valid ISO-3166-1 alpha-2 code.", workhours.country)));
+    }
+
     // Convert query params to WorkHoursRequest
     let request = WorkHoursRequest {
         start_date: workhours.start_date.clone(),
@@ -166,6 +210,12 @@ pub async fn list_holidays(
     country: web::Path<String>,
 ) -> impl Responder {
     let country = country.to_lowercase();
+
+    // Validate that the country code is ISO-3166-1 compliant
+    if !is_valid_country_code(&country) {
+        return Err(actix_web::error::ErrorBadRequest(format!("Invalid country code: {}. Must be a valid ISO-3166-1 alpha-2 code.", country)));
+    }
+
     let db = data.db.lock().unwrap();
     match db.get_holidays_by_country(&country) {
         Ok(holidays) => Ok::<HttpResponse, actix_web::error::Error>(HttpResponse::Ok().json(holidays)),
@@ -178,6 +228,12 @@ pub async fn calculate_work_hours(
     req: web::Json<WorkHoursRequest>,
 ) -> Result<HttpResponse, actix_web::error::Error> {
     log::debug!("Processing work hours calculation: {:?}", req);
+
+    // Validate that the country code is ISO-3166-1 compliant
+    if !req.country.is_empty() && !is_valid_country_code(&req.country) {
+        return Err(actix_web::error::ErrorBadRequest(format!("Invalid country code: {}. Must be a valid ISO-3166-1 alpha-2 code.", req.country)));
+    }
+
     // Parse dates and convert to timezone-aware datetimes
     let start_date = DateTime::parse_from_rfc3339(&req.start_date)
         .map_err(|e| actix_web::error::ErrorBadRequest(format!("Invalid start date format: {}", e)))?;

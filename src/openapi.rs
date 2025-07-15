@@ -77,9 +77,10 @@ pub fn swagger_spec() -> String {
                             "name": "country",
                             "required": true,
                             "schema": {
-                                "type": "string"
+                                "type": "string",
+                                "pattern": "^[a-z]{2}$"
                             },
-                            "description": "Country code"
+                            "description": "ISO-3166-1 alpha-2 country code (e.g., 'us', 'fr')"
                         }
                     ],
                     "requestBody": {
@@ -110,16 +111,17 @@ pub fn swagger_spec() -> String {
                 },
                 "get": {
                     "summary": "List holidays for a country",
-                    "description": "Adds a holiday for the specified country",
+                    "description": "Lists holidays for the specified country",
                     "parameters": [
                         {
                             "in": "path",
                             "name": "country",
                             "required": true,
                             "schema": {
-                                "type": "string"
+                                "type": "string",
+                                "pattern": "^[a-z]{2}$"
                             },
-                            "description": "Country code"
+                            "description": "ISO-3166-1 alpha-2 country code (e.g., 'us', 'fr')"
                         }
                     ],
                     "responses": {
@@ -168,6 +170,8 @@ pub fn swagger_spec() -> String {
                         },
                         "country": {
                             "type": "string",
+                            "pattern": "^[a-z]{2}$",
+                            "description": "ISO-3166-1 alpha-2 country code",
                             "example": "fr",
                             "default": "fr"
                         },

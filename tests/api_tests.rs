@@ -202,3 +202,72 @@ async fn test_get_work_hours_invalid_timezone() {
 
     assert_eq!(resp.status(), 400);
 }
+
+#[actix_rt::test]
+async fn test_add_holiday_invalid_country() {
+    let app = create_test_app().await;
+
+    // Create a test holiday list
+    let holidays = vec![
+        Holiday {
+            date: "2023-12-25T00:00:00Z".to_string(),
+            description: "Christmas".to_string(),
+        }
+    ];
+
+    // Send POST request with invalid country code
+    let resp = test::TestRequest::post()
+        .uri("/holidays/invalid")
+        .set_json(&holidays)
+        .send_request(&app)
+        .await;
+
+    // Check response is 400 Bad Request
+    assert_eq!(resp.status(), 400);
+
+    // Check error message
+    let body = test::read_body(resp).await;
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body_str.contains("Invalid country code"));
+    assert!(body_str.contains("Must be a valid ISO-3166-1 alpha-2 code"));
+}
+
+#[actix_rt::test]
+async fn test_list_holidays_invalid_country() {
+    let app = create_test_app().await;
+
+    // List holidays with invalid country code
+    let resp = test::TestRequest::get()
+        .uri("/holidays/invalid")
+        .send_request(&app)
+        .await;
+
+    // Check response is 400 Bad Request
+    assert_eq!(resp.status(), 400);
+
+    // Check error message
+    let body = test::read_body(resp).await;
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body_str.contains("Invalid country code"));
+    assert!(body_str.contains("Must be a valid ISO-3166-1 alpha-2 code"));
+}
+
+#[actix_rt::test]
+async fn test_get_work_hours_invalid_country() {
+    let app = create_test_app().await;
+
+    // Test with invalid country code
+    let resp = test::TestRequest::get()
+        .uri("/?startDate=2023-10-02T09:00:00Z&endDate=2023-10-06T17:00:00Z&country=invalid&timezone=UTC")
+        .send_request(&app)
+        .await;
+
+    // Check response is 400 Bad Request
+    assert_eq!(resp.status(), 400);
+
+    // Check error message
+    let body = test::read_body(resp).await;
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body_str.contains("Invalid country code"));
+    assert!(body_str.contains("Must be a valid ISO-3166-1 alpha-2 code"));
+}
