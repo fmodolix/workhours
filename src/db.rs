@@ -28,7 +28,7 @@ impl Database {
             )",
             [],
         )?;
-        Ok(Database { 
+        Ok(Database {
             conn: Mutex::new(conn),
             path: path.to_string(),
         })

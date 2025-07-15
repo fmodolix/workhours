@@ -4,7 +4,7 @@ pub mod openapi;
 
 use actix_web::{web, HttpResponse, get, post, Responder};
 use serde::{Serialize, Deserialize};
-use chrono::{DateTime, TimeZone, Datelike};
+use chrono::{DateTime, TimeZone, Datelike, NaiveDate};
 use chrono_tz::Tz;
 use std::sync::Mutex;
 use actix_web::cookie::time::Time;
@@ -215,22 +215,19 @@ pub async fn calculate_work_hours(
 
 
     let mut current = start_date;
+    let db = data.db.lock().unwrap();
+    let holidays = db.get_holidays_by_country(&country).unwrap_or(vec![]);
     while current.date_naive() <= end_date.date_naive() {
         // Skip weekends and holidays
         if current.weekday() == chrono::Weekday::Sat || current.weekday() == chrono::Weekday::Sun {
             current = current + chrono::Duration::days(1);
             continue;
         }
-
         // Check if current date is a holiday
         let is_holiday = {
-            let db = data.db.lock().unwrap();
-            let holidays = db.get_holidays_by_country(&country).unwrap_or(vec![]);
             holidays.iter().any(|h| {
-                let h_date = DateTime::parse_from_rfc3339(&h.date)
-                    .map(|d| timezone.from_local_datetime(&d.naive_local()).unwrap())
-                    .unwrap_or(current);
-                h_date.date_naive() == current.date_naive()
+                let h_date = NaiveDate::parse_from_str(&h.date, "%Y-%m-%d").unwrap();
+                h_date == current.date_naive()
             })
         };
 
