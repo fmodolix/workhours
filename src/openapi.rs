@@ -14,7 +14,7 @@ pub fn swagger_spec() -> String {
         "openapi": "3.0.0",
         "info": {
             "title": "Work Hours API",
-            "description": "API for calculating work hours between dates, taking into account country-specific holidays and timezones",
+            "description": "API for calculating work hours between dates, taking into account country-specific holidays and timezones. \n Holidays are taken from the opendata holidays API: https://openholidaysapi.org/swagger/index.html.",
             "version": "1.0.0"
         },
         "servers": [
@@ -27,7 +27,7 @@ pub fn swagger_spec() -> String {
             "/": {
                 "post": {
                     "summary": "Calculate work hours between dates",
-                    "description": "Calculates the number of work hours between two dates, taking into account weekends, holidays, and timezones",
+                    "description": "Calculates the number of work hours between two dates, taking into account weekends, holidays, and timezones.",
                     "requestBody": {
                         "required": true,
                         "content": {
@@ -59,78 +59,6 @@ pub fn swagger_spec() -> String {
                                             "error": {
                                                 "type": "string"
                                             }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "/holidays/{country}": {
-                "post": {
-                    "summary": "Add holidays for a country",
-                    "description": "Adds multiple holidays for the specified country",
-                    "parameters": [
-                        {
-                            "in": "path",
-                            "name": "country",
-                            "required": true,
-                            "schema": {
-                                "type": "string"
-                            },
-                            "description": "Country code"
-                        }
-                    ],
-                    "requestBody": {
-                        "required": true,
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/Holiday"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "201": {
-                            "description": "Holiday added successfully",
-                            "content": {
-                                "text/plain": {
-                                    "schema": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "get": {
-                    "summary": "List holidays for a country",
-                    "description": "Adds a holiday for the specified country",
-                    "parameters": [
-                        {
-                            "in": "path",
-                            "name": "country",
-                            "required": true,
-                            "schema": {
-                                "type": "string"
-                            },
-                            "description": "Country code"
-                        }
-                    ],
-                    "responses": {
-                        "200": {
-                            "description": "List of holidays for the specified country",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "array",
-                                        "items": {
-                                            "$ref": "#/components/schemas/Holiday"
                                         }
                                     }
                                 }
@@ -174,23 +102,16 @@ pub fn swagger_spec() -> String {
                             "example": "fr",
                             "default": "fr"
                         },
+                        "subdivision": {
+                            "type": "string",
+                            "description": "ISO-3166-2 country subdivision code",
+                            "example": "fr",
+                            "default": "fr"
+                        },
                         "timezone": {
                             "type": "string",
                             "default": "UTC",
                             "example": "Europe/Paris"
-                        }
-                    }
-                },
-                "Holiday": {
-                    "type": "object",
-                    "required": ["date"],
-                    "properties": {
-                        "date": {
-                            "type": "string",
-                            "format": "date"
-                        },
-                        "description": {
-                            "type": "string"
                         }
                     }
                 },

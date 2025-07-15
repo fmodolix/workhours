@@ -1,8 +1,9 @@
 // Re-export modules and types for use in tests
 pub mod db;
 pub mod openapi;
+pub mod holidays_api;
 
-use actix_web::{web, HttpResponse, get, post, Responder};
+use actix_web::{web, HttpResponse, post};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, TimeZone, Datelike, NaiveDate};
 use chrono_tz::Tz;
@@ -32,6 +33,8 @@ pub struct WorkHoursRequest {
     pub end_of_day: String,
     #[serde(default)]
     pub country: String,
+    #[serde(default)]
+    pub subdivision: Option<String>,
     #[serde(default)]
     pub timezone: String,
 }
@@ -78,40 +81,6 @@ pub struct AppState {
     pub db: Mutex<db::Database>,
 }
 
-// Re-export the handler functions for testing
-#[post("/holidays/{country}")]
-pub async fn add_holiday(
-    data: web::Data<AppState>,
-    holidays: web::Json<Vec<Holiday>>,
-    country: web::Path<String>,
-) -> impl Responder {
-    let country = country.to_lowercase();
-    let mut success_count = 0;
-    let mut error_messages = Vec::new();
-
-    let db = data.db.lock().unwrap();
-
-    for holiday in holidays.iter() {
-        let db_holiday = db::Holiday {
-            id: None,
-            date: holiday.date.clone(),
-            description: holiday.description.clone(),
-            country: country.clone(),
-        };
-
-        match db.add_holiday(&db_holiday) {
-            Ok(_) => success_count += 1,
-            Err(e) => error_messages.push(format!("Failed to add holiday {}: {}", holiday.date, e)),
-        }
-    }
-
-    if error_messages.is_empty() {
-        HttpResponse::Ok().json(format!("{} holidays added successfully", success_count))
-    } else {
-        HttpResponse::InternalServerError().json(error_messages)
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkHoursQueryParams {
     #[serde(rename = "startDate")]
@@ -128,6 +97,8 @@ pub struct WorkHoursQueryParams {
     pub country: String,
     #[serde(default)]
     pub timezone: String,
+    #[serde(default)]
+    pub subdivision: Option<String>,
 }
 
 #[post("/")]
@@ -155,22 +126,10 @@ pub async fn get_work_hours(
         end_of_day: workhours.end_of_day.clone(),
         country: workhours.country.clone(),
         timezone: workhours.timezone.clone(),
+        subdivision: workhours.subdivision.clone()
     };
 
     calculate_work_hours(data, web::Json(request)).await
-}
-
-#[get("/holidays/{country}")]
-pub async fn list_holidays(
-    data: web::Data<AppState>,
-    country: web::Path<String>,
-) -> impl Responder {
-    let country = country.to_lowercase();
-    let db = data.db.lock().unwrap();
-    match db.get_holidays_by_country(&country) {
-        Ok(holidays) => Ok::<HttpResponse, actix_web::error::Error>(HttpResponse::Ok().json(holidays)),
-        Err(e) => Err(actix_web::error::ErrorInternalServerError(format!("Failed to fetch holidays: {}", e))),
-    }
 }
 
 pub async fn calculate_work_hours(
@@ -211,12 +170,43 @@ pub async fn calculate_work_hours(
     }
 
     let country = req.country.to_lowercase();
+    let subdivision = req.subdivision.clone().unwrap_or(String::new());
     let mut work_hours = 0.0;
 
 
     let mut current = start_date;
-    let db = data.db.lock().unwrap();
-    let holidays = db.get_holidays_by_country(&country).unwrap_or(vec![]);
+
+    // Fetch holidays from API instead of database
+    let holidays = if cfg!(test) {
+        // In test mode, use the mock implementation
+        match holidays_api::mock::get_holidays_for_country(&country, &subdivision).await {
+            Ok(api_holidays) => {
+                // Convert API holidays to the format expected by the work hours calculation
+                holidays_api::convert_to_db_holiday(api_holidays, &country)
+            },
+            Err(e) => {
+                // Log the error and fall back to database
+                log::error!("Failed to fetch holidays from mock API: {}. Falling back to database.", e);
+                let db = data.db.lock().unwrap();
+                db.get_holidays_by_country(&country).unwrap_or(vec![])
+            }
+        }
+    } else {
+        // In production mode, use the real implementation
+        match holidays_api::get_holidays_for_country(&country, &subdivision, current.date_naive()).await {
+            Ok(api_holidays) => {
+                // Convert API holidays to the format expected by the work hours calculation
+                holidays_api::convert_to_db_holiday(api_holidays, &country)
+            },
+            Err(e) => {
+                // Log the error and fall back to database
+                log::error!("Failed to fetch holidays from API: {}. Falling back to database.", e);
+                let db = data.db.lock().unwrap();
+                db.get_holidays_by_country(&country).unwrap_or(vec![])
+            }
+        }
+    };
+
     while current.date_naive() <= end_date.date_naive() {
         // Skip weekends and holidays
         if current.weekday() == chrono::Weekday::Sat || current.weekday() == chrono::Weekday::Sun {
@@ -226,7 +216,8 @@ pub async fn calculate_work_hours(
         // Check if current date is a holiday
         let is_holiday = {
             holidays.iter().any(|h| {
-                let h_date = NaiveDate::parse_from_str(&h.date, "%Y-%m-%d").unwrap();
+                println!("raw date from open data: {:?}", h.date);
+                let h_date = NaiveDate::parse_from_str(&h.date[..10], "%Y-%m-%d").unwrap();
                 h_date == current.date_naive()
             })
         };
@@ -312,6 +303,7 @@ pub async fn calculate_work_hours(
 mod tests {
     use super::*;
     use actix_web::web;
+    use holidays_api::mock as holidays_api_mock;
 
     #[test]
     fn test_end_or_duration_deserialization() {
@@ -382,6 +374,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
@@ -407,6 +400,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
@@ -422,6 +416,16 @@ mod tests {
         // Test a workweek with a holiday
         // Monday to Friday, but Wednesday is a holiday
         // 4 days * 8 hours = 32 hours
+
+        // Set up mock holidays for the API
+        holidays_api_mock::set_mock_holidays("us", vec![
+            holidays_api::Holiday {
+                date: "2023-10-04T00:00:00Z".to_string(),
+                description: "Test Holiday".to_string(),
+            },
+        ]);
+
+        // Also set up database holidays as fallback
         let db_data = create_test_db_with_holidays(vec![
             ("2023-10-04T00:00:00Z".to_string(), "Test Holiday".to_string(), "us".to_string()),
         ]);
@@ -435,6 +439,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
@@ -443,6 +448,9 @@ mod tests {
         let response: WorkHoursResponse = serde_json::from_slice(&bytes).unwrap();
 
         assert_eq!(response.work_hours, 32.0);
+
+        // Clean up mock holidays
+        holidays_api_mock::clear_mock_holidays();
     }
 
     #[actix_rt::test]
@@ -461,6 +469,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
@@ -486,6 +495,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "fr".to_string(),
             timezone: "Europe/Paris".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
@@ -512,6 +522,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
@@ -536,6 +547,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await;
@@ -562,6 +574,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await;
@@ -588,6 +601,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await;
@@ -614,6 +628,7 @@ mod tests {
             end_of_day: default_end_of_day(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await;
@@ -641,6 +656,7 @@ mod tests {
             end_of_day: "16:00:00".to_string(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();
@@ -666,6 +682,7 @@ mod tests {
             end_of_day: "16:00:00".to_string(),
             country: "us".to_string(),
             timezone: "UTC".to_string(),
+            subdivision: None,
         };
 
         let result = calculate_work_hours(db_data, web::Json(request)).await.unwrap();

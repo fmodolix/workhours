@@ -8,7 +8,7 @@ use std::env;
 // Import from the library
 use workhours::{
     db,
-    add_holiday, get_work_hours, list_holidays,
+    get_work_hours,
     AppState,
     openapi
 };
@@ -48,9 +48,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state.clone())
             .wrap(Logger::default())
             .service(health)
-            .service(add_holiday)
             .service(get_work_hours)
-            .service(list_holidays)
             .service(openapi::swagger_routes())
     })
     .bind(&server_url)?
