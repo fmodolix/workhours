@@ -163,6 +163,6 @@ pub async fn serve_swagger_schema() -> HttpResponse {
 
 pub fn swagger_routes() -> impl HttpServiceFactory {
     web::scope("")
-        .service(web::resource("/swagger").route(web::get().to(serve_swagger_ui)))
+        .service(web::resource("/").route(web::get().to(serve_swagger_ui)))
         .service(web::resource("/schema").route(web::get().to(serve_swagger_schema)))
 }
